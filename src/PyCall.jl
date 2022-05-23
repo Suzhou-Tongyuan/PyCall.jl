@@ -1,4 +1,9 @@
 module PyCall
+# const python = "C:\\Users\\TR\\.julia\\conda\\3\\python.exe"
+# const libpython = "C:\\Users\\TR\\.julia\\conda\\3\\python39.dll"
+# const pyprogramname = "C:\\Users\\TR\\.julia\\conda\\3\\python.exe"
+# const pyversion_build = v"3.9.10"
+# const PYTHONHOME = "C:\\Users\\TR\\.julia\\conda\\3"
 
 if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
     @eval Base.Experimental.@optlevel 1
@@ -35,13 +40,33 @@ import Base.Iterators: filter
 #########################################################################
 
 include(joinpath(dirname(@__FILE__), "..", "deps","depsutils.jl"))
+function _SetupPythonEnv()
+    _TONGYUAN_PYTHON_DYLIB = ENV["TONGYUAN_PYTHON_DYLIB"]
+    _TONGYUAN_PYTHON_HOME = ENV["TONGYUAN_PYTHON_HOME"]
+    _TONGYUAN_PYTHON_NAME = ENV["TONGYUAN_PYTHON_NAME"]
+    # @info :setup _TONGYUAN_PYTHON_DYLIB _TONGYUAN_PYTHON_HOME _TONGYUAN_PYTHON_NAME
+    libpy_handle = Libdl.dlopen(_TONGYUAN_PYTHON_DYLIB, Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
+    pyversion = vparse(split(Py_GetVersion(libpy_handle))[1])
+    if !Py_IsInitialized(libpy_handle)
+        refconfig_libpython[] = _TONGYUAN_PYTHON_DYLIB
+        refconfig_pyprogramname[] = _TONGYUAN_PYTHON_NAME
+        refconfig_python[] = _TONGYUAN_PYTHON_NAME
+        refconfig_PYTHONHOME[] = _TONGYUAN_PYTHON_HOME
+        ref_libpyhandle[] = libpy_handle
+        Py_SetPythonHome(libpy_handle, pyversion, ENV["TONGYUAN_PYTHON_HOME"])
+        Py_SetProgramName(libpy_handle, pyversion, ENV["TONGYUAN_PYTHON_NAME"])
+        Py_InitializeEx(libpy_handle)
+    end
+    libpy_handle
+end
+
 include("startup.jl")
 
 """
 Python executable used by PyCall in the current process.
 """
 current_python() = _current_python[]
-const _current_python = Ref(pyprogramname)
+const _current_python = refconfig_pyprogramname
 
 #########################################################################
 
@@ -507,7 +532,7 @@ The Python package $name could not be imported by pyimport. Usually this means
 that you did not install $name in the Python version being used by PyCall.
 
 """
-                if conda
+                if refconfig_conda[]
                     msg = msg * """
 PyCall is currently configured to use the Julia-specific Python distribution
 installed by the Conda.jl package.  To install the $name module, you can
@@ -677,10 +702,10 @@ string otherwise.
 """
 function anaconda_conda()
     # Anaconda Python seems to always include "Anaconda" in the version string.
-    if conda || !occursin("conda", unsafe_string(ccall(@pysym(:Py_GetVersion), Ptr{UInt8}, ())))
+    if refconfig_conda[] || !occursin("conda", unsafe_string(ccall(@pysym(:Py_GetVersion), Ptr{UInt8}, ())))
         return ""
     end
-    aconda = joinpath(dirname(pyprogramname), "conda")
+    aconda = joinpath(dirname(refconfig_pyprogramname[]), "conda")
     return isfile(aconda) ? aconda : ""
 end
 
@@ -707,7 +732,7 @@ function pyimport_conda(modulename::AbstractString, condapkg::AbstractString,
     try
         pyimport(modulename)
     catch e
-        if conda
+        if refconfig_conda[]
             @info "Installing $modulename via the Conda $condapkg package..."
             isempty(channel) || Conda.add_channel(channel)
             Conda.add(condapkg)

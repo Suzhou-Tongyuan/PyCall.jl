@@ -65,7 +65,7 @@ end
 #########################################################################
 # Virtual environment support
 
-venv_python(::Nothing) = pyprogramname
+venv_python(::Nothing) = pyprogramname[]
 
 function venv_python(venv::AbstractString, suffix::AbstractString = "")
     # `suffix` is used to insert version number (e.g., "3.7") in tests
@@ -125,6 +125,7 @@ function Py_Finalize()
     ccall(@pysym(:Py_Finalize), Cvoid, ())
 end
 
+
 function __init__()
     # Clear out global states.  This is required only for PyCall
     # AOT-compiled into system image.
@@ -141,56 +142,58 @@ function __init__()
     # sanity check: in Pkg for Julia 0.7+, the location of Conda can change
     # if e.g. you checkout Conda master, and we'll need to re-build PyCall
     # for something like pyimport_conda to continue working.
-    if conda && dirname(python) != abspath(Conda.PYTHONDIR)
-        error("Using Conda.jl python, but location of $python seems to have moved to $(Conda.PYTHONDIR).  Re-run Pkg.build(\"PyCall\") and restart Julia.")
-    end
+    # if conda && dirname(python) != abspath(Conda.PYTHONDIR)
+    #     error("Using Conda.jl python, but location of $python seems to have moved to $(Conda.PYTHONDIR).  Re-run Pkg.build(\"PyCall\") and restart Julia.")
+    # end
+
+    libpy_handle = _SetupPythonEnv()
+    already_inited = true
+    # @info :after
 
     # issue #189
-    libpy_handle = libpython === nothing ? C_NULL :
-        Libdl.dlopen(libpython, Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
+    # libpy_handle = libpython === nothing ? C_NULL :
+    #     Libdl.dlopen(libpython, Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
+    # already_inited = 0 != ccall((@pysym :Py_IsInitialized), Cint, ())
+    # if !already_inited
+    #     pyhome = PYTHONHOME
 
-    already_inited = 0 != ccall((@pysym :Py_IsInitialized), Cint, ())
+    #     if isfile(get(ENV, "PYCALL_JL_RUNTIME_PYTHON", ""))
+    #         _current_python[] = ENV["PYCALL_JL_RUNTIME_PYTHON"]
 
-    if !already_inited
-        pyhome = PYTHONHOME
+    #         # Check libpython compatibility.
+    #         venv_libpython = find_libpython(current_python())
+    #         if venv_libpython === nothing
+    #             error("""
+    #             `libpython` for $(current_python()) cannot be found.
+    #             PyCall.jl cannot initialize Python safely.
+    #             """)
+    #         elseif venv_libpython != libpython
+    #             error("""
+    #             Incompatible `libpython` detected.
+    #             `libpython` for $(current_python()) is:
+    #                 $venv_libpython
+    #             `libpython` for $pyprogramname is:
+    #                 $libpython
+    #             PyCall.jl only supports loading Python environment using
+    #             the same `libpython`.
+    #             """)
+    #         end
 
-        if isfile(get(ENV, "PYCALL_JL_RUNTIME_PYTHON", ""))
-            _current_python[] = ENV["PYCALL_JL_RUNTIME_PYTHON"]
+    #         if haskey(ENV, "PYCALL_JL_RUNTIME_PYTHONHOME")
+    #             pyhome = ENV["PYCALL_JL_RUNTIME_PYTHONHOME"]
+    #         else
+    #             pyhome = pythonhome_of(current_python())
+    #         end
+    #     elseif conda && Sys.iswindows()
+    #         # some Python modules on Windows need the PATH to include
+    #         # Anaconda's Library\bin directory in order to find their DLL files
+    #         ENV["PATH"] = Conda.bin_dir(Conda.ROOTENV) * ";" * get(ENV, "PATH", "")
+    #     end
 
-            # Check libpython compatibility.
-            venv_libpython = find_libpython(current_python())
-            if venv_libpython === nothing
-                error("""
-                `libpython` for $(current_python()) cannot be found.
-                PyCall.jl cannot initialize Python safely.
-                """)
-            elseif venv_libpython != libpython
-                error("""
-                Incompatible `libpython` detected.
-                `libpython` for $(current_python()) is:
-                    $venv_libpython
-                `libpython` for $pyprogramname is:
-                    $libpython
-                PyCall.jl only supports loading Python environment using
-                the same `libpython`.
-                """)
-            end
-
-            if haskey(ENV, "PYCALL_JL_RUNTIME_PYTHONHOME")
-                pyhome = ENV["PYCALL_JL_RUNTIME_PYTHONHOME"]
-            else
-                pyhome = pythonhome_of(current_python())
-            end
-        elseif conda && Sys.iswindows()
-            # some Python modules on Windows need the PATH to include
-            # Anaconda's Library\bin directory in order to find their DLL files
-            ENV["PATH"] = Conda.bin_dir(Conda.ROOTENV) * ";" * get(ENV, "PATH", "")
-        end
-
-        Py_SetPythonHome(libpy_handle, pyversion, pyhome)
-        Py_SetProgramName(libpy_handle, pyversion, current_python())
-        ccall((@pysym :Py_InitializeEx), Cvoid, (Cint,), 0)
-    end
+    #     Py_SetPythonHome(libpy_handle, pyversion, pyhome)
+    #     Py_SetProgramName(libpy_handle, pyversion, current_python())
+    #     ccall((@pysym :Py_InitializeEx), Cvoid, (Cint,), 0)
+    # end
 
     # Will get reinitialized properly on first use
     Sys.iswindows() && (PyActCtx[] = C_NULL)
