@@ -39,24 +39,34 @@ import Base.Iterators: filter
 
 #########################################################################
 
-include(joinpath(dirname(@__FILE__), "..", "deps","depsutils.jl"))
+include(joinpath(dirname(@__FILE__), "..", "deps","setup_envs.jl"))
+
 function _SetupPythonEnv()
-    _TONGYUAN_PYTHON_DYLIB = ENV["TONGYUAN_PYTHON_DYLIB"]
-    _TONGYUAN_PYTHON_HOME = ENV["TONGYUAN_PYTHON_HOME"]
-    _TONGYUAN_PYTHON_NAME = ENV["TONGYUAN_PYTHON_NAME"]
     # @info :setup _TONGYUAN_PYTHON_DYLIB _TONGYUAN_PYTHON_HOME _TONGYUAN_PYTHON_NAME
-    libpy_handle = Libdl.dlopen(_TONGYUAN_PYTHON_DYLIB, Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
+    # @show ref_libpyhandle
+    @show libpython
+    @show python
+    @show pyprogramname
+    @show PYTHONHOME
+
+    # @show libpython
+    if ref_libpyhandle[] == C_NULL
+        libpy_handle = ref_libpyhandle[] = Libdl.dlopen(String(libpython), Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
+    else
+        libpy_handle = ref_libpyhandle[]
+    end
+    @show libpy_handle
     pyversion = vparse(split(Py_GetVersion(libpy_handle))[1])
     if !Py_IsInitialized(libpy_handle)
-        refconfig_libpython[] = _TONGYUAN_PYTHON_DYLIB
-        refconfig_pyprogramname[] = _TONGYUAN_PYTHON_NAME
-        refconfig_python[] = _TONGYUAN_PYTHON_NAME
-        refconfig_PYTHONHOME[] = _TONGYUAN_PYTHON_HOME
         ref_libpyhandle[] = libpy_handle
-        Py_SetPythonHome(libpy_handle, pyversion, ENV["TONGYUAN_PYTHON_HOME"])
-        Py_SetProgramName(libpy_handle, pyversion, ENV["TONGYUAN_PYTHON_NAME"])
+        Py_SetPythonHome(libpy_handle, pyversion, String(PYTHONHOME))
+        Py_SetProgramName(libpy_handle, pyversion, String(pyprogramname))
+        println(:debug1)
         Py_InitializeEx(libpy_handle)
+        println(:debug)
     end
+    @show ref_libpyhandle
+    println()
     libpy_handle
 end
 
@@ -65,8 +75,8 @@ include("startup.jl")
 """
 Python executable used by PyCall in the current process.
 """
-current_python() = _current_python[]
-const _current_python = refconfig_pyprogramname
+current_python() = String(_current_python)
+const _current_python = pyprogramname
 
 #########################################################################
 
@@ -713,7 +723,7 @@ function anaconda_conda()
     if refconfig_conda[] || !occursin("conda", unsafe_string(ccall(@pysym(:Py_GetVersion), Ptr{UInt8}, ())))
         return ""
     end
-    aconda = joinpath(dirname(refconfig_pyprogramname[]), "conda")
+    aconda = joinpath(dirname(pyprogramname), "conda")
     return isfile(aconda) ? aconda : ""
 end
 

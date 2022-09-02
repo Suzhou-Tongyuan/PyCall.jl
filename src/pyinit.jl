@@ -65,7 +65,7 @@ end
 #########################################################################
 # Virtual environment support
 
-venv_python(::Nothing) = pyprogramname[]
+venv_python(::Nothing) = String(pyprogramname)
 
 function venv_python(venv::AbstractString, suffix::AbstractString = "")
     # `suffix` is used to insert version number (e.g., "3.7") in tests

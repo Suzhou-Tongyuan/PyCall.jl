@@ -38,7 +38,6 @@ EnumProcessModules(hProcess, lphModule, cb, lpcbNeeded) =
 #     global symbols_present = hassym(proc_handle, :Py_GetVersion)
 # end
 const ref_libpyhandle = Ref(convert(Ptr{Cvoid}, C_NULL))
-include(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
 libpy_handle = proc_handle = _SetupPythonEnv()
 symbols_present = true
 

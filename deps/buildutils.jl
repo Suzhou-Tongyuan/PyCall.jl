@@ -37,7 +37,7 @@ function show_dlopen_error(lib, e)
 end
 
 # return libpython name, libpython pointer
-function find_libpython(python::AbstractString; _dlopen = Libdl.dlopen)
+function find_libpython_deps(python::AbstractString; _dlopen = Libdl.dlopen)
     dlopen_flags = Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL
 
     libpaths = exec_find_libpython(python, `--list-all`)
