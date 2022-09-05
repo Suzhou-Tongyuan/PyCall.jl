@@ -116,13 +116,20 @@ const _finalized = Ref(false)
 function _set_finalized()
     # This function MUST NOT invoke any Python APIs.
     # https://docs.python.org/3/c-api/sys.html#c.Py_AtExit
-    _finalized[] = true
+    if !_finalized[]
+        _finalized[] = true
+        _unload(LibPyHandle)
+    end
     return nothing
 end
 
 function Py_Finalize()
-    pygui_stop_all()
-    ccall(@pysym(:Py_Finalize), Cvoid, ())
+    if isloaded(LibPyHandle) && !_finalized[] && Py_IsInitialized(Ptr(LibPyHandle))
+        pygui_stop_all()
+        ccall(@pysym(:Py_Finalize), Cvoid, ())
+    end
+    _unload(LibPyHandle)
+    _finalized[] = true
 end
 
 
@@ -130,6 +137,7 @@ function __init__()
     # Clear out global states.  This is required only for PyCall
     # AOT-compiled into system image.
     _finalized[] = false
+    global conda = parse(Bool, String(_env_conda))
     empty!(_namespaces)
     empty!(eventloops)
     global npy_initialized = false
@@ -145,51 +153,13 @@ function __init__()
     # if conda && dirname(python) != abspath(Conda.PYTHONDIR)
     #     error("Using Conda.jl python, but location of $python seems to have moved to $(Conda.PYTHONDIR).  Re-run Pkg.build(\"PyCall\") and restart Julia.")
     # end
-
-    libpy_handle = _SetupPythonEnv()
-    already_inited = true
-    # @info :after
-
-    # issue #189
-    # libpy_handle = libpython === nothing ? C_NULL :
-    #     Libdl.dlopen(libpython, Libdl.RTLD_LAZY|Libdl.RTLD_DEEPBIND|Libdl.RTLD_GLOBAL)
-    # already_inited = 0 != ccall((@pysym :Py_IsInitialized), Cint, ())
-    # if !already_inited
-    #     pyhome = PYTHONHOME
-
-    #     if isfile(get(ENV, "PYCALL_JL_RUNTIME_PYTHON", ""))
-    #         _current_python[] = ENV["PYCALL_JL_RUNTIME_PYTHON"]
-
-    #         # Check libpython compatibility.
-    #         venv_libpython = find_libpython(current_python())
-    #         if venv_libpython === nothing
-    #             error("""
-    #             `libpython` for $(current_python()) cannot be found.
-    #             PyCall.jl cannot initialize Python safely.
-    #             """)
-    #         elseif venv_libpython != libpython
-    #             error("""
-    #             Incompatible `libpython` detected.
-    #             `libpython` for $(current_python()) is:
-    #                 $venv_libpython
-    #             `libpython` for $pyprogramname is:
-    #                 $libpython
-    #             PyCall.jl only supports loading Python environment using
-    #             the same `libpython`.
-    #             """)
-    #         end
-
-    #         if haskey(ENV, "PYCALL_JL_RUNTIME_PYTHONHOME")
-    #             pyhome = ENV["PYCALL_JL_RUNTIME_PYTHONHOME"]
-    #         else
-    #             pyhome = pythonhome_of(current_python())
-    #         end
-    #     elseif conda && Sys.iswindows()
-    #         # some Python modules on Windows need the PATH to include
-    #         # Anaconda's Library\bin directory in order to find their DLL files
-    #         ENV["PATH"] = Conda.bin_dir(Conda.ROOTENV) * ";" * get(ENV, "PATH", "")
-    #     end
-
+    already_inited = isloaded(LibPyHandle)
+    _ = Ptr(LibPyHandle)
+    if conda && Sys.iswindows()
+        # some Python modules on Windows need the PATH to include
+        # Anaconda's Library\bin directory in order to find their DLL files
+        ENV["PATH"] = Conda.bin_dir(Conda.ROOTENV) * ";" * get(ENV, "PATH", "")
+    end
     #     Py_SetPythonHome(libpy_handle, pyversion, pyhome)
     #     Py_SetProgramName(libpy_handle, pyversion, current_python())
     #     ccall((@pysym :Py_InitializeEx), Cvoid, (Cint,), 0)
@@ -236,11 +206,11 @@ function __init__()
     #    obj[:foo] = jlfun2pyfun(some_julia_function)
     # This is a bit of a kludge, obviously.
     copy!(
-        jlfun2pyfun, 
+        jlfun2pyfun,
         pyeval_("lambda f: lambda *args, **kwargs: f(*args, **kwargs)", pynamespace(PyCall), pynamespace(PyCall))
     )
 
-    if !already_inited
+    if start_python_from_julia()
         # some modules (e.g. IPython) expect sys.argv to be set
         ref0 = Ref{UInt32}(0)
         GC.@preserve ref0 ccall(@pysym(:PySys_SetArgvEx), Cvoid,
@@ -283,9 +253,13 @@ function __init__()
     @pycheckz ccall((@pysym :Py_AtExit), Cint, (Ptr{Cvoid},),
                     @cfunction(_set_finalized, Cvoid, ()))
     if !already_inited
+        atexit(Py_Finalize)
         # Once `_set_finalized` is successfully registered to
         # `Py_AtExit`, it is safe to call `Py_Finalize` during
         # finalization of this Julia process.
-        atexit(Py_Finalize)
+    end
+
+    if !_start_python_from_julia[]
+        setenvstring(python, pyimport("sys").executable)
     end
 end
