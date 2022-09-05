@@ -106,6 +106,11 @@ function pythonenv(cmd::Cmd)
 end
 
 
+function pythonenv(cmd::Base.CmdRedirect)
+    Base.CmdRedirect(pythonenv(cmd.cmd), cmd.handle, cmd.stream_no, cmd.readable)
+end
+
+
 function pythonhome_of(pyprogramname::AbstractString)
     if Sys.iswindows()
         # PYTHONHOME tells python where to look for both pure python
