@@ -3,6 +3,8 @@
 using VersionParsing
 import Conda, Libdl
 
+include("find_libpython.jl")
+
 pyvar(python::AbstractString, mod::AbstractString, var::AbstractString) = chomp(read(pythonenv(`$python -c "import $mod; print($mod.$(var))"`), String))
 
 pyconfigvar(python::AbstractString, var::AbstractString) = pyvar(python, "distutils.sysconfig", "get_config_var('$(var)')")
@@ -20,11 +22,7 @@ const PYCALL_DEBUG_BUILD = "yes" == get(ENV, "PYCALL_DEBUG_BUILD", "no")
 function exec_find_libpython(python::AbstractString, options)
     # Do not inline `@__DIR__` into the backticks to expand correctly.
     # See: https://github.com/JuliaLang/julia/issues/26323
-    script = joinpath(@__DIR__, "find_libpython.py")
-    cmd = `$python $script $options`
-    if PYCALL_DEBUG_BUILD
-        cmd = `$cmd --verbose`
-    end
+    cmd = cmd_find_libpython(python, options, PYCALL_DEBUG_BUILD)
     return readlines(pythonenv(cmd))
 end
 
