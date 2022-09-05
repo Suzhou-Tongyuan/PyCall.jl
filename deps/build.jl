@@ -75,9 +75,6 @@ try # make sure deps.jl file is removed on error
     end
 
     use_conda = dirname(python) == abspath(Conda.PYTHONDIR)
-    if use_conda
-        Conda.add("numpy")
-    end
 
     (libpython, libpy_name) = find_libpython(python)
     programname = pysys(python, "executable")
@@ -101,7 +98,7 @@ try # make sure deps.jl file is removed on error
 
     writeifchanged("deps.jl", """
     include("envstring.jl")
-    const python = EnvString("PYCALL_PYEXE", "$(escape_string(python))")
+    const python = EnvString("PYTHON", "$(escape_string(python))")
     const pyversion_build = $(repr(pyversion))
 
     const libpython = EnvString("PYCALL_LIBPYTHON") do
@@ -120,7 +117,7 @@ try # make sure deps.jl file is removed on error
         end
     end
 
-    const PYTHONHOME = EnvString("PYCALL_PYHOME") do
+    const PYTHONHOME = EnvString("PYTHONHOME") do
         if "$(escape_string(libpy_name))" == libpython
             "$(escape_string(PYTHONHOME))"
         else
