@@ -40,20 +40,6 @@ import Base.Iterators: filter
 #########################################################################
 
 include(joinpath(dirname(@__FILE__), "..", "deps","depsutils.jl"))
-module BuildTimeUtils
-    if isdefined(Base, :Experimental)
-        # Julia 1.2
-        if isdefined(Base.Experimental, Symbol("@optlevel"))
-            @eval Base.Experimental.@optlevel 1
-        end
-
-        if isdefined(Base.Experimental, Symbol("@compiler_options"))
-            @eval Base.Experimental.@compiler_options infer=no compile=min optimize=0
-        end
-    end
-    include(joinpath(dirname(@__FILE__), "..", "deps","buildutils.jl"))
-    include(joinpath(dirname(@__FILE__), "..", "deps","depsutils.jl"))
-end
 
 function _SetupPythonEnv()
     local libpy_handle

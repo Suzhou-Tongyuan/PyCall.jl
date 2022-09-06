@@ -101,6 +101,21 @@ try # make sure deps.jl file is removed on error
     const python = EnvString("PYTHON", "$(escape_string(python))")
     const pyversion_build = $(repr(pyversion))
 
+    module BuildTimeUtils
+        if isdefined(Base, :Experimental)
+            # Julia 1.2
+            if isdefined(Base.Experimental, Symbol("@optlevel"))
+                @eval Base.Experimental.@optlevel 1
+            end
+
+            if isdefined(Base.Experimental, Symbol("@compiler_options"))
+                @eval Base.Experimental.@compiler_options infer=no compile=min optimize=0
+            end
+        end
+        include(joinpath(dirname(@__FILE__), "..", "deps","buildutils.jl"))
+        include(joinpath(dirname(@__FILE__), "..", "deps","depsutils.jl"))
+    end
+
     const libpython = EnvString("PYCALL_LIBPYTHON") do
         if "$(escape_string(python))" == python
             "$(escape_string(libpy_name))"
