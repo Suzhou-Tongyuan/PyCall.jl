@@ -71,22 +71,22 @@ const Py_hash_t = pyversion < v"3.2" ? Clong : Int
 # whether to use unicode for strings by default, ala Python 3
 const pyunicode_literals = pyversion >= v"3.0"
 
-@generated function pysym_impl(::Val{funcname}) where funcname
+function pysym_impl(::Val{funcname}) where funcname
     PointerLoader(() ->
         Libdl.dlsym(Ptr(LibPyHandle), funcname))
 end
 
-@generated function pyglobal_impl(::Val{name}) where name
+function pyglobal_impl(::Val{name}) where name
     PointerLoader(() ->
         Libdl.dlsym(Ptr(LibPyHandle), name))
 end
 
-@generated function pyglobalobj_impl(::Val{name}) where name
+function pyglobalobj_impl(::Val{name}) where name
     PointerLoader(() ->
         reinterpret(Ptr{PyObject_struct}, Libdl.dlsym(Ptr(LibPyHandle),  name)))
 end
 
-@generated function pyglobalobjptr_impl(::Val{name}) where name
+function pyglobalobjptr_impl(::Val{name}) where name
     PointerLoader(() ->
         unsafe_load(reinterpret(Ptr{Ptr{PyObject_struct}}, Libdl.dlsym(Ptr(LibPyHandle),  name))))
 end
