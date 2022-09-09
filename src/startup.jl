@@ -10,12 +10,16 @@ include(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
 const InProcessLibPyHandle = EnvString("PYCALL_INPROC_LIBPYPTR", "")
 const InProcessProcID = EnvString("PYCALL_INPROC_PROCID", "")
 
-mutable struct PointerLoader{P <: Ptr, F <: Function}
-    ptr :: P
-    ptr_initializer :: F
-    function PointerLoader(ptr_initializer::F) where {F <: Function}
+mutable struct PointerLoader{P<:Ptr,F<:Function}
+    ptr::P
+    ptr_initializer::F
+    function PointerLoader(ptr_initializer::F) where {F<:Function}
         ptr = ptr_initializer()
-        new{typeof(ptr), F}(ptr, ptr_initializer)
+        new{typeof(ptr),F}(ptr, ptr_initializer)
+    end
+
+    function PointerLoader(::Type{P}, ptr_initializer::F) where {P, F<:Function}
+        new{P,F}(P(C_NULL), ptr_initializer)
     end
 end
 
@@ -23,7 +27,7 @@ function isloaded(p::PointerLoader)
     p.ptr != C_NULL
 end
 
-function _unload(p::PointerLoader{P}) where P
+function _unload(p::PointerLoader{P}) where {P}
     p.ptr = reinterpret(P, C_NULL)
 end
 
@@ -36,11 +40,11 @@ end
 
 const LibPyHandle = PointerLoader(() -> _SetupPythonEnv())
 
-function Core.Ptr(pl::PointerLoader{P}) where P
+function Core.Ptr(pl::PointerLoader{P}) where {P}
     if pl.ptr == reinterpret(P, C_NULL)
         pl.ptr = pl.ptr_initializer()
     end
-    return pl.ptr
+    return pl.ptr::P
 end
 
 const pyversion = vparse(split(Py_GetVersion(Ptr(LibPyHandle)))[1])
@@ -71,38 +75,61 @@ const Py_hash_t = pyversion < v"3.2" ? Clong : Int
 # whether to use unicode for strings by default, ala Python 3
 const pyunicode_literals = pyversion >= v"3.0"
 
-function pysym_impl(::Val{funcname}) where funcname
-    PointerLoader(() ->
+function _eval_symbol(symbol::Any)
+    if symbol isa QuoteNode
+        return Symbol(symbol.value :: Union{Symbol, String})
+    end
+    if symbol isa AbstractString
+        return Symbol(symbol)
+    end
+    if symbol isa Symbol
+        return getfield((@__MODULE__), symbol)::Symbol
+    end
+    error("invalid symbol $symbol :: $(typeof(symbol))")
+end
+
+const _cache_loader = Dict{Symbol,PointerLoader}()
+
+function pysym_impl(funcname::Symbol)
+    PointerLoader(Ptr{Cvoid}, () ->
         Libdl.dlsym(Ptr(LibPyHandle), funcname))
 end
 
-function pyglobal_impl(::Val{name}) where name
-    PointerLoader(() ->
+function pyglobal_impl(name::Symbol)
+    PointerLoader(Ptr{Cvoid}, () ->
         Libdl.dlsym(Ptr(LibPyHandle), name))
 end
 
-function pyglobalobj_impl(::Val{name}) where name
-    PointerLoader(() ->
-        reinterpret(Ptr{PyObject_struct}, Libdl.dlsym(Ptr(LibPyHandle),  name)))
+function pyglobalobj_impl(name::Symbol)
+    PointerLoader(Ptr{PyObject_struct}, () ->
+        reinterpret(Ptr{PyObject_struct}, Libdl.dlsym(Ptr(LibPyHandle), name)))
 end
 
-function pyglobalobjptr_impl(::Val{name}) where name
-    PointerLoader(() ->
-        unsafe_load(reinterpret(Ptr{Ptr{PyObject_struct}}, Libdl.dlsym(Ptr(LibPyHandle),  name))))
+function pyglobalobjptr_impl(name::Symbol)
+    PointerLoader(Ptr{PyObject_struct}, () ->
+        unsafe_load(reinterpret(Ptr{Ptr{PyObject_struct}}, Libdl.dlsym(Ptr(LibPyHandle), name))))
+end
+
+function _cache_sym_load(funcname, loader)
+    sym = _eval_symbol(funcname) :: Symbol
+    loader = get!(_cache_loader, sym) do
+        loader(sym)
+    end
+    :($Ptr($loader))
 end
 
 macro pysym(funcname)
-    :( $Ptr($pysym_impl($Val($(esc(funcname))))) )
+    _cache_sym_load(funcname, pysym_impl)
 end
 
 macro pyglobal(name)
-    :( $Ptr($pyglobal_impl($Val($(esc(name))))) )
+    _cache_sym_load(name, pyglobal_impl)
 end
 
 macro pyglobalobj(name)
-    :( $Ptr($pyglobalobj_impl($Val($(esc(name))))) )
+    _cache_sym_load(name, pyglobalobj_impl)
 end
 
 macro pyglobalobjptr(name)
-    :( $Ptr($pyglobalobjptr_impl($Val($(esc(name))))) )
+    _cache_sym_load(name, pyglobalobjptr_impl)
 end
