@@ -714,7 +714,6 @@ function init()
     _pyjulia_core = init_pyjulia()::PyObject
     setup_jv(_pyjulia_core)
     setup_basics(_pyjulia_core)
-    Py(os."environ")[reasonable_box("PYJULIA_CORE")] = reasonable_box("pycall")
     nothing
 end
 
