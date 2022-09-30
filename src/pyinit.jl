@@ -265,4 +265,7 @@ function __init__()
             setenvstring(pyprogramname, exe_path)
         end
     end
+
+
+    PyJulia.init()
 end

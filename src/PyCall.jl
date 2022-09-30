@@ -1,9 +1,4 @@
 module PyCall
-# const python = "C:\\Users\\TR\\.julia\\conda\\3\\python.exe"
-# const libpython = "C:\\Users\\TR\\.julia\\conda\\3\\python39.dll"
-# const pyprogramname = "C:\\Users\\TR\\.julia\\conda\\3\\python.exe"
-# const pyversion_build = v"3.9.10"
-# const PYTHONHOME = "C:\\Users\\TR\\.julia\\conda\\3"
 
 if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@optlevel"))
     @eval Base.Experimental.@optlevel 1
@@ -1018,6 +1013,8 @@ precompile(pyjlwrap_dealloc, (PyPtr,))
 precompile(pyjlwrap_repr, (PyPtr,))
 precompile(pyjlwrap_hash, (PyPtr,))
 precompile(pyjlwrap_hash32, (PyPtr,))
+
+include("pyjulia.jl")
 
 # TODO: precompilation of the io.jl functions
 

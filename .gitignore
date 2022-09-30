@@ -3,6 +3,5 @@ aot/Manifest.toml
 aot/Project.toml
 aot/_julia_path
 aot/sys.*
-deps/deps.jl
 deps/PYTHON
 deps/build.log
