@@ -271,6 +271,9 @@ end
 
 function reasonable_box(x::Any)::Py
     # fast path
+    if x isa PyObject
+        return x
+    end
     if x === nothing
         return MyPyAPI.none
     end
@@ -289,8 +292,12 @@ function reasonable_box(x::Any)::Py
     if x isa Union{ComplexF16, ComplexF32, ComplexF64}
         return Py(PyObject(ComplexF64(x)))
     end
-
-    x isa BitArray && return box_julia(x)
+    if x isa BitArray
+        # This enables using BitArray in Python;
+        # To convert this to `numpy.ndarray[bool]`, use `Base.collect(bitarray)`,
+        # which gives your an `numpy.ndarray[bool]`
+        return box_julia(x)
+    end
 
     if x isa AbstractArray
         elty = eltype(typeof(x))
